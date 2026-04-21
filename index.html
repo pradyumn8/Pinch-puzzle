@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>Photo Puzzle</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3.1675466124/drawing_utils.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #0c0f1a;
+      --panel: rgba(18, 22, 36, 0.85);
+      --ink: #f0f3ff;
+      --muted: #8a93b2;
+      --accent: #6ee7ff;
+      --accent-2: #ff7ac6;
+      --ok: #58e39b;
+      --bad: #ff6b8a;
+      --stroke: rgba(255, 255, 255, 0.12);
+      --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      user-select: none;
+    }
+
+    body {
+      background:
+        radial-gradient(1000px 700px at 10% -10%, rgba(110, 231, 255, 0.15), transparent 60%),
+        radial-gradient(900px 700px at 110% 110%, rgba(255, 122, 198, 0.15), transparent 60%),
+        var(--bg);
+    }
+
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    /* ---------- start ---------- */
+    .hero {
+      text-align: center;
+      padding: 28px 24px;
+      max-width: 420px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 34px;
+      letter-spacing: 0.02em;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .btn {
+      appearance: none;
+      border: 0;
+      padding: 14px 26px;
+      margin-top: 22px;
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      color: #0a0f1e;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(110, 231, 255, 0.35);
+    }
+
+    .btn.ghost {
+      color: var(--ink);
+      background: transparent;
+      border: 1px solid var(--stroke);
+      box-shadow: none;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .error {
+      margin-top: 14px;
+      color: var(--bad);
+      font-size: 13px;
+      min-height: 1.2em;
+      max-width: 360px;
+      text-align: center;
+    }
+
+    /* ---------- camera ---------- */
+    #screen-camera {
+      justify-content: center;
+    }
+
+    .cam-wrap {
+      width: 100%;
+      max-width: 440px;
+      padding: 0 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .cam-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      padding: 14px;
+      background: linear-gradient(135deg, rgba(110, 231, 255, 0.35), rgba(255, 122, 198, 0.35));
+      box-shadow: var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 60px rgba(110, 231, 255, 0.2);
+    }
+
+    .cam-frame::after {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      border-radius: 14px;
+      pointer-events: none;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      z-index: 3;
+    }
+
+    #video {
+      position: absolute;
+      inset: 14px;
+      width: calc(100% - 28px);
+      height: calc(100% - 28px);
+      border-radius: 10px;
+      object-fit: cover;
+      transform: scaleX(-1);
+      background: #000;
+      z-index: 1;
+    }
+
+    .cam-overlay {
+      position: relative;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .cam-top,
+    .cam-bottom {
+      width: 100%;
+      padding: 0 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+    }
+
+    .pill {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+      pointer-events: auto;
+    }
+
+    .cam-hint {
+      text-align: center;
+      max-width: 320px;
+      padding: 10px 16px;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      font-size: 13px;
+      line-height: 1.5;
+      pointer-events: auto;
+    }
+
+    .cam-hint b {
+      color: var(--accent);
+    }
+
+    .shutter {
+      position: absolute;
+      inset: 14px;
+      border-radius: 10px;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .hand-canvas {
+      position: absolute;
+      inset: 14px;
+      width: calc(100% - 28px);
+      height: calc(100% - 28px);
+      border-radius: 10px;
+      z-index: 2;
+      pointer-events: none;
+      transform: scaleX(-1);
+    }
+
+    .palm-ring {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 96px;
+      height: 96px;
+      margin: -48px 0 0 -48px;
+      z-index: 3;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s;
+    }
+
+    .palm-ring.alive { opacity: 0.55; }
+    .palm-ring.show  { opacity: 1; }
+
+    .palm-ring svg {
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+    }
+
+    .palm-ring .bg {
+      fill: rgba(12, 15, 26, 0.55);
+      stroke: rgba(255, 255, 255, 0.25);
+      stroke-width: 2;
+    }
+
+    .palm-ring .fg {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 5;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 0.1s linear;
+      filter: drop-shadow(0 0 6px rgba(110, 231, 255, 0.7));
+    }
+
+    .palm-ring .emoji {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      line-height: 1;
+    }
+
+    .shutter.flash {
+      animation: flash 0.35s ease-out;
+    }
+
+    @keyframes flash {
+      0% {
+        opacity: 0.85
+      }
+
+      100% {
+        opacity: 0
+      }
+    }
+
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      pointer-events: auto;
+    }
+
+    /* ---------- game ---------- */
+    #screen-game {
+      justify-content: flex-start;
+    }
+
+    .game-top {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      gap: 10px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .stats b {
+      color: var(--ink);
+    }
+
+    .stage {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      overflow-y: auto;
+      overflow-x: hidden;
+      touch-action: pan-y;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #board {
+      position: absolute;
+      border-radius: 14px;
+      padding: 10px;
+      background: linear-gradient(135deg, rgba(110, 231, 255, 0.35), rgba(255, 122, 198, 0.35));
+      box-shadow: var(--shadow), 0 0 60px rgba(110, 231, 255, 0.18);
+    }
+
+    #board-inner {
+      position: absolute;
+      inset: 10px;
+      border-radius: 8px;
+      background-image: var(--hint-img);
+      background-size: cover;
+      background-position: center;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      opacity: 0;
+      transition: opacity 0.25s;
+      filter: saturate(1);
+    }
+
+    #board.hint #board-inner {
+      opacity: 0.85;
+    }
+
+    #board .slot {
+      position: absolute;
+      border: 1px dashed rgba(255, 255, 255, 0.12);
+      box-sizing: border-box;
+      border-radius: 2px;
+    }
+
+    .piece {
+      position: absolute;
+      border-radius: 4px;
+      background-size: cover;
+      box-shadow:
+        0 8px 22px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.35),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+      cursor: grab;
+      touch-action: none;
+      will-change: transform;
+      transition: box-shadow 0.18s, filter 0.18s;
+    }
+
+    .piece.drag {
+      cursor: grabbing;
+      z-index: 100;
+      filter: brightness(1.08);
+      box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.7),
+        0 0 0 2px var(--accent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      transition: none;
+    }
+
+    .piece.locked {
+      cursor: default;
+      z-index: 1;
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+        0 0 0 0 transparent;
+    }
+
+    .piece.snap {
+      animation: snap 0.25s ease-out;
+    }
+
+    @keyframes snap {
+      0% { transform: var(--snap-from) scale(1); }
+      60% { transform: var(--snap-to) scale(1.08); }
+      100% { transform: var(--snap-to) scale(1); }
+    }
+
+    .cam-mini {
+      position: absolute;
+      top: 60px;
+      right: 10px;
+      width: 128px;
+      height: 128px;
+      border-radius: 14px;
+      overflow: hidden;
+      z-index: 30;
+      background: #000;
+      border: 1px solid var(--stroke);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+    }
+
+    .cam-mini video,
+    .cam-mini canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    .cam-mini canvas { pointer-events: none; }
+
+    .cam-mini .tag {
+      position: absolute;
+      left: 6px;
+      bottom: 6px;
+      padding: 2px 8px;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--ink);
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 999px;
+      z-index: 2;
+    }
+
+    .v-cursor {
+      position: absolute;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 3px solid var(--accent);
+      box-shadow: 0 0 14px rgba(110, 231, 255, 0.8);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 80;
+      display: none;
+      transition: width 0.1s, height 0.1s, background 0.1s, border-color 0.1s;
+    }
+
+    .v-cursor.on { display: block; }
+
+    .v-cursor.pinch {
+      width: 28px;
+      height: 28px;
+      background: rgba(255, 122, 198, 0.35);
+      border-color: var(--accent-2);
+    }
+
+    /* ---------- win ---------- */
+    #screen-win .panel {
+      background: var(--panel);
+      border: 1px solid var(--stroke);
+      border-radius: 18px;
+      padding: 28px 24px;
+      max-width: 360px;
+      text-align: center;
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+    }
+
+    #screen-win h2 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      background: linear-gradient(90deg, var(--ok), var(--accent));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    #screen-win p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    #win-preview {
+      margin: 18px auto 0;
+      width: 220px;
+      height: 220px;
+      border-radius: 12px;
+      background-size: cover;
+      box-shadow: var(--shadow);
+    }
+
+    .confetti {
+      position: fixed;
+      pointer-events: none;
+      inset: 0;
+      overflow: hidden;
+      z-index: 5;
+    }
+
+    .confetti i {
+      position: absolute;
+      width: 8px;
+      height: 14px;
+      top: -20px;
+      animation: fall linear forwards;
+    }
+
+    @keyframes fall {
+      to {
+        transform: translateY(110vh) rotate(720deg);
+      }
+    }
+
+    /* ---------- preview ---------- */
+    #screen-preview .preview-wrap {
+      width: 100%;
+      max-width: 440px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 18px;
+      padding: 14px;
+      background: linear-gradient(135deg, rgba(110, 231, 255, 0.35), rgba(255, 122, 198, 0.35));
+      box-shadow: var(--shadow), 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 60px rgba(110, 231, 255, 0.2);
+    }
+
+    .frame::after {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      border-radius: 14px;
+      pointer-events: none;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    }
+
+    .frame-inner {
+      width: 100%;
+      height: 100%;
+      border-radius: 10px;
+      background-size: cover;
+      background-position: center;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+    }
+
+    .preview-title {
+      margin: 0;
+      font-size: 22px;
+      letter-spacing: 0.02em;
+      color: var(--ink);
+    }
+
+    .preview-sub {
+      margin: -8px 0 4px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .diff-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .diff {
+      appearance: none;
+      border: 1px solid var(--stroke);
+      background: transparent;
+      color: var(--ink);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      min-width: 64px;
+    }
+
+    .diff.active {
+      background: linear-gradient(90deg, rgba(110, 231, 255, 0.2), rgba(255, 122, 198, 0.2));
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .preview-actions .btn {
+      margin-top: 4px;
+    }
+
+    /* game screen: small camera/skeleton preview in the top-right corner */
+    .game-bg {
+      position: fixed;
+      top: 96px;
+      right: 14px;
+      width: 156px;
+      height: 156px;
+      border-radius: 14px;
+      overflow: hidden;
+      z-index: 25;
+      background: #000;
+      border: 1px solid var(--stroke);
+      box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+      pointer-events: none;
+    }
+
+    .game-bg::after {
+      content: 'detection';
+      position: absolute;
+      left: 6px;
+      bottom: 6px;
+      padding: 2px 8px;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: var(--ink);
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 999px;
+      z-index: 2;
+    }
+
+    .game-bg video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+      opacity: 1;
+    }
+
+    .game-bg canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform: scaleX(-1);
+      opacity: 1;
+    }
+
+    #screen-game {
+      position: fixed;
+      inset: 0;
+      padding: 0;
+      justify-content: flex-start;
+    }
+
+    #screen-game .game-top {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 14px;
+      background: linear-gradient(to bottom, rgba(12, 15, 26, 0.65), rgba(12, 15, 26, 0));
+      z-index: 30;
+    }
+
+    #screen-game .stage {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      touch-action: none;
+      z-index: 10;
+      background: transparent;
+    }
+
+    /* v-cursor is fixed to the viewport now */
+    #v-cursor {
+      position: fixed;
+      z-index: 1000;
+    }
+
+    #v-cursor.click-flash { animation: v-click 0.32s ease-out; }
+    @keyframes v-click {
+      0%   { transform: translate(-50%, -50%) scale(1); }
+      45%  { transform: translate(-50%, -50%) scale(1.65); }
+      100% { transform: translate(-50%, -50%) scale(1); }
+    }
+
+    #detect-video {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      top: -9999px;
+      left: -9999px;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- 1. START ---------------------------------- -->
+  <section id="screen-start" class="screen active">
+    <div class="hero">
+      <h1>Photo Puzzle</h1>
+      <p>Take a photo, we'll shuffle it into a jigsaw. Drag the pieces into place.</p>
+      <button class="btn" id="btn-start">Allow Camera</button>
+      <div class="error" id="start-error"></div>
+    </div>
+  </section>
+
+  <!-- 2. CAMERA --------------------------------- -->
+  <section id="screen-camera" class="screen">
+    <div class="cam-wrap">
+      <div class="cam-overlay cam-top">
+        <button class="icon-btn" id="btn-back-to-start" title="Back">&larr;</button>
+        <span class="pill" id="cam-status">ready</span>
+        <button class="icon-btn" id="btn-flip" title="Flip camera">&#8635;</button>
+      </div>
+      <div class="cam-frame">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas class="hand-canvas" id="hand-canvas-cam"></canvas>
+        <div class="palm-ring" id="palm-ring">
+          <svg viewBox="0 0 100 100">
+            <circle class="bg" cx="50" cy="50" r="44"></circle>
+            <circle class="fg" cx="50" cy="50" r="44"
+              stroke-dasharray="276.46" stroke-dashoffset="276.46"></circle>
+          </svg>
+          <div class="emoji">&#128400;</div>
+        </div>
+        <div class="shutter" id="shutter"></div>
+      </div>
+      <div class="cam-hint">
+        <b>Show an open palm</b> to the camera and hold ~1s to capture.
+      </div>
+      <div class="cam-overlay cam-bottom">
+        <span class="pill" id="cam-size">—</span>
+        <button class="btn" id="btn-capture">Capture</button>
+        <span class="pill">space / enter</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2.5 PREVIEW ------------------------------- -->
+  <section id="screen-preview" class="screen">
+    <div class="preview-wrap">
+      <h2 class="preview-title">Your photo</h2>
+      <div class="frame">
+        <div class="frame-inner" id="preview-img"></div>
+      </div>
+      <p class="preview-sub">Place the shuffled pieces back into this frame.</p>
+      <div class="diff-row" id="diff-row">
+        <button class="diff active" data-n="3">3 × 3</button>
+        <button class="diff" data-n="4">4 × 4</button>
+        <button class="diff" data-n="5">5 × 5</button>
+        <button class="diff" data-n="6">6 × 6</button>
+      </div>
+      <div class="preview-actions">
+        <button class="btn ghost" id="btn-retake">Retake</button>
+        <button class="btn" id="btn-play">Start Puzzle</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. GAME ----------------------------------- -->
+  <section id="screen-game" class="screen">
+    <div class="game-top">
+      <button class="btn ghost" id="btn-hint">Hint</button>
+      <div class="stats">
+        <span>moves <b id="moves">0</b></span>
+        <span>time <b id="timer">0:00</b></span>
+      </div>
+      <button class="btn ghost" id="btn-new">New photo</button>
+    </div>
+    <div class="game-bg">
+      <video id="game-video" autoplay playsinline muted></video>
+      <canvas id="hand-canvas-game"></canvas>
+    </div>
+    <div class="stage" id="stage"></div>
+  </section>
+
+  <!-- 4. WIN ------------------------------------ -->
+  <section id="screen-win" class="screen">
+    <div class="panel">
+      <h2>Complete!</h2>
+      <p id="win-sub">Nicely done.</p>
+      <div id="win-preview"></div>
+      <button class="btn" id="btn-again" style="margin-top: 22px;">Play again</button>
+    </div>
+    <div class="confetti" id="confetti"></div>
+  </section>
+
+  <!-- global gesture helpers (outside all screens) -->
+  <video id="detect-video" autoplay playsinline muted></video>
+  <div class="v-cursor" id="v-cursor"></div>
+
+  <script>
+    // ============================================================
+    // state
+    // ============================================================
+    const state = {
+      stream: null,
+      facing: 'environment',
+      photo: null,          // dataURL of captured photo
+      N: 3,                 // grid size (NxN)
+      pieces: [],           // {el, r, c, x, y, locked}
+      moves: 0,
+      started: 0,
+      timerId: 0,
+      board: null,          // {x, y, size, cell}
+    };
+
+    const screens = {
+      start: document.getElementById('screen-start'),
+      camera: document.getElementById('screen-camera'),
+      preview: document.getElementById('screen-preview'),
+      game: document.getElementById('screen-game'),
+      win: document.getElementById('screen-win'),
+    };
+    function show(name) {
+      for (const k in screens) screens[k].classList.toggle('active', k === name);
+    }
+
+    // ============================================================
+    // 1. camera permission + live preview
+    // ============================================================
+    const video = document.getElementById('video');
+    const startError = document.getElementById('start-error');
+    const btnStart = document.getElementById('btn-start');
+    const btnBackToStart = document.getElementById('btn-back-to-start');
+    const btnFlip = document.getElementById('btn-flip');
+    const camStatus = document.getElementById('cam-status');
+    const camSize = document.getElementById('cam-size');
+
+    async function openCamera() {
+      stopCamera();
+      try {
+        state.stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: state.facing, width: { ideal: 1280 }, height: { ideal: 1280 } },
+          audio: false,
+        });
+        video.srcObject = state.stream;
+        detectVideo.srcObject = state.stream;
+        await new Promise((r, j) => {
+          const t = setTimeout(() => j(new Error('timeout')), 8000);
+          video.onloadedmetadata = () => { clearTimeout(t); r(); };
+        });
+        await video.play();
+        detectVideo.play().catch(() => { });
+        camSize.textContent = `${video.videoWidth}×${video.videoHeight}`;
+        camStatus.textContent = 'show open palm';
+        startHandDetection();
+        return true;
+      } catch (e) {
+        const msg = e.name === 'NotAllowedError'
+          ? 'Camera permission denied. Enable it in your browser settings and try again.'
+          : e.name === 'NotFoundError'
+            ? 'No camera found on this device.'
+            : 'Could not open camera: ' + (e.message || e.name);
+        startError.textContent = msg;
+        show('start');
+        return false;
+      }
+    }
+
+    function stopCamera() {
+      stopHandDetection();
+      if (state.stream) {
+        for (const t of state.stream.getTracks()) t.stop();
+        state.stream = null;
+        video.srcObject = null;
+        detectVideo.srcObject = null;
+        gameVideo.srcObject = null;
+      }
+    }
+
+    // ============================================================
+    // hand-gesture capture (MediaPipe Hands)
+    // ============================================================
+    const palmRing = document.getElementById('palm-ring');
+    const palmFg = palmRing.querySelector('.fg');
+    const RING_LEN = 276.46; // 2π·44
+    const handCanvasCam = document.getElementById('hand-canvas-cam');
+    const handCanvasGame = document.getElementById('hand-canvas-game');
+    const gameVideo = document.getElementById('game-video');
+    const detectVideo = document.getElementById('detect-video');
+    const vCursor = document.getElementById('v-cursor');
+    const hand = {
+      detector: null,
+      ready: false,
+      running: false,
+      rafId: 0,
+      busy: false,
+      gotResult: false,
+      palmFrames: 0,
+      needed: 15,            // ~1s at 15 fps send rate
+      lastCapture: 0,
+      lastSent: 0,
+      sendIntervalMs: 66,    // throttle to ~15 fps
+    };
+    const pinch = { grabbed: null, offsetX: 0, offsetY: 0, wasPinching: false };
+
+    function updatePalmRing(ratio) {
+      const r = Math.max(0, Math.min(1, ratio));
+      palmRing.classList.toggle('show', r > 0.01);
+      palmFg.style.strokeDashoffset = (RING_LEN * (1 - r)).toFixed(2);
+    }
+
+    function setStatus(msg) {
+      camStatus.textContent = msg;
+      console.log('[gesture]', msg);
+    }
+
+    function detectOpenPalm(lm) {
+      const wrist = lm[0];
+      const fingers = [
+        [8, 6], [12, 10], [16, 14], [20, 18], // index, middle, ring, pinky
+      ];
+      let extended = 0;
+      for (const [tip, pip] of fingers) {
+        const tD = Math.hypot(lm[tip].x - wrist.x, lm[tip].y - wrist.y);
+        const pD = Math.hypot(lm[pip].x - wrist.x, lm[pip].y - wrist.y);
+        if (tD > pD * 1.15) extended++;
+      }
+      // thumb: compare tip-to-wrist vs mcp-to-wrist
+      const tT = Math.hypot(lm[4].x - wrist.x, lm[4].y - wrist.y);
+      const tM = Math.hypot(lm[2].x - wrist.x, lm[2].y - wrist.y);
+      if (tT > tM * 1.1) extended++;
+      return extended >= 4;
+    }
+
+    // maps a (videoW,videoH) source into a (boxW,boxH) target with object-fit:cover
+    function coverMap(videoW, videoH, boxW, boxH) {
+      const scale = Math.max(boxW / videoW, boxH / videoH);
+      const drawW = videoW * scale;
+      const drawH = videoH * scale;
+      return {
+        drawW, drawH,
+        offX: (boxW - drawW) / 2,
+        offY: (boxH - drawH) / 2,
+      };
+    }
+
+    function drawSkeleton(canvas, srcVideo, lm) {
+      if (!canvas) return;
+      const vw = srcVideo?.videoWidth || 0;
+      const vh = srcVideo?.videoHeight || 0;
+      if (!vw || !vh) return;
+      // size canvas to its rendered CSS box so drawing matches on-screen pixels
+      const cw = canvas.clientWidth || canvas.width;
+      const ch = canvas.clientHeight || canvas.height;
+      if (!cw || !ch) return;
+      if (canvas.width !== cw) canvas.width = cw;
+      if (canvas.height !== ch) canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, cw, ch);
+      if (!lm) return;
+
+      const m = coverMap(vw, vh, cw, ch);
+      // re-normalize landmark coords into the canvas space
+      const mapped = lm.map((p) => ({
+        x: (m.offX + p.x * m.drawW) / cw,
+        y: (m.offY + p.y * m.drawH) / ch,
+        z: p.z,
+        visibility: p.visibility,
+      }));
+      if (window.drawConnectors && window.HAND_CONNECTIONS) {
+        drawConnectors(ctx, mapped, HAND_CONNECTIONS, { color: '#6ee7ff', lineWidth: 4 });
+      } else {
+        const seq = [[0,1,2,3,4],[0,5,6,7,8],[5,9,10,11,12],[9,13,14,15,16],[13,17,18,19,20],[0,17]];
+        ctx.strokeStyle = '#6ee7ff';
+        ctx.lineWidth = 4;
+        for (const chain of seq) {
+          ctx.beginPath();
+          for (let i = 0; i < chain.length; i++) {
+            const p = mapped[chain[i]];
+            if (i === 0) ctx.moveTo(p.x * cw, p.y * ch);
+            else ctx.lineTo(p.x * cw, p.y * ch);
+          }
+          ctx.stroke();
+        }
+      }
+      if (window.drawLandmarks) {
+        drawLandmarks(ctx, mapped, { color: '#ffffff', fillColor: '#ff7ac6', lineWidth: 1, radius: 5 });
+      } else {
+        ctx.fillStyle = '#ff7ac6';
+        for (const p of mapped) {
+          ctx.beginPath();
+          ctx.arc(p.x * cw, p.y * ch, 5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function onHandResults(results) {
+      hand.busy = false;
+      hand.gotResult = true;
+      const lm = results.multiHandLandmarks && results.multiHandLandmarks[0];
+
+      // draw skeleton on whichever screen is active (if any)
+      if (screens.camera.classList.contains('active')) {
+        drawSkeleton(handCanvasCam, video, lm);
+      } else if (screens.game.classList.contains('active')) {
+        drawSkeleton(handCanvasGame, gameVideo, lm);
+      }
+
+      // universal: cursor tracking + pinch-to-click + piece drag
+      updateUniversalCursor(lm);
+
+      // camera-only: palm-hold to capture
+      if (screens.camera.classList.contains('active')) {
+        handleCameraPalm(lm);
+      } else if (hand.palmFrames > 0) {
+        hand.palmFrames = 0;
+        updatePalmRing(0);
+      }
+    }
+
+    function handleCameraPalm(lm) {
+      if (!lm) {
+        hand.palmFrames = Math.max(0, hand.palmFrames - 2);
+        updatePalmRing(hand.palmFrames / hand.needed);
+        setStatus('no hand — show open palm');
+        return;
+      }
+      if (detectOpenPalm(lm)) {
+        hand.palmFrames++;
+        updatePalmRing(hand.palmFrames / hand.needed);
+        setStatus(`hold… ${Math.round((hand.palmFrames / hand.needed) * 100)}%`);
+        if (hand.palmFrames >= hand.needed && Date.now() - hand.lastCapture > 2500) {
+          hand.lastCapture = Date.now();
+          hand.palmFrames = 0;
+          updatePalmRing(0);
+          capture();
+        }
+      } else {
+        hand.palmFrames = Math.max(0, hand.palmFrames - 1);
+        updatePalmRing(hand.palmFrames / hand.needed);
+        setStatus('hand seen — open fingers');
+      }
+    }
+
+    function updateUniversalCursor(lm) {
+      if (!lm) {
+        vCursor.classList.remove('on', 'pinch');
+        if (pinch.grabbed) releasePinch();
+        pinch.wasPinching = false;
+        return;
+      }
+
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const m = coverMap(detectVideo.videoWidth || 1, detectVideo.videoHeight || 1, vw, vh);
+      const tip = lm[8];
+      const vpX = m.offX + (1 - tip.x) * m.drawW; // mirrored to match self-view
+      const vpY = m.offY + tip.y * m.drawH;
+
+      vCursor.classList.add('on');
+      vCursor.style.left = vpX + 'px';
+      vCursor.style.top = vpY + 'px';
+
+      // pinch with hysteresis — make "open" responsive so release is crisp
+      const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y);
+      // average two palm bone lengths for a stabler reference
+      const palmA = Math.hypot(lm[0].x - lm[5].x, lm[0].y - lm[5].y);
+      const palmB = Math.hypot(lm[0].x - lm[17].x, lm[0].y - lm[17].y);
+      const palmSize = Math.max(0.01, (palmA + palmB) / 2);
+      const ratio = pinchDist / palmSize;
+      const closeThresh = 0.45;
+      const openThresh = 0.7;
+      const isPinch = pinch.wasPinching ? ratio < openThresh : ratio < closeThresh;
+      vCursor.classList.toggle('pinch', isPinch);
+
+      const pinchStarted = isPinch && !pinch.wasPinching;
+      const pinchEnded = !isPinch && pinch.wasPinching;
+
+      if (pinchStarted) handlePinchStart(vpX, vpY);
+      if (isPinch && pinch.grabbed) handlePieceDrag(vpX, vpY);
+      if (pinchEnded && pinch.grabbed) releasePinch();
+
+      pinch.wasPinching = isPinch;
+    }
+
+    function handlePinchStart(vpX, vpY) {
+      // debounce: avoid double-firing on the same pinch
+      if (Date.now() - (pinch.lastClick || 0) < 450) return;
+
+      // 1) check for a button under the cursor — this works on every screen
+      const hit = document.elementFromPoint(vpX, vpY);
+      if (hit) {
+        const btn = hit.closest('button, .diff');
+        if (btn && !btn.disabled) {
+          pinch.lastClick = Date.now();
+          flashCursor();
+          btn.click();
+          return;
+        }
+      }
+
+      // 2) game screen: grab the nearest unlocked piece
+      if (screens.game.classList.contains('active') && state.board) {
+        const sr = stage.getBoundingClientRect();
+        const sx = vpX - sr.left + stage.scrollLeft;
+        const sy = vpY - sr.top + stage.scrollTop;
+        const grabR = state.board.cell * 0.9;
+        let best = null, bestD = grabR;
+        for (const p of state.pieces) {
+          if (p.locked) continue;
+          const ccx = p.x + state.board.cell / 2;
+          const ccy = p.y + state.board.cell / 2;
+          const d = Math.hypot(ccx - sx, ccy - sy);
+          if (d < bestD) { bestD = d; best = p; }
+        }
+        if (best) {
+          pinch.grabbed = best;
+          pinch.offsetX = sx - best.x;
+          pinch.offsetY = sy - best.y;
+          best.el.classList.add('drag');
+          stage.insertBefore(best.el, spacer);
+        }
+      }
+    }
+
+    function handlePieceDrag(vpX, vpY) {
+      if (!pinch.grabbed) return;
+      const sr = stage.getBoundingClientRect();
+      const sx = vpX - sr.left + stage.scrollLeft;
+      const sy = vpY - sr.top + stage.scrollTop;
+      const p = pinch.grabbed;
+      p.x = sx - pinch.offsetX;
+      p.y = sy - pinch.offsetY;
+      p.el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+    }
+
+    function releasePinch() {
+      if (!pinch.grabbed) return;
+      const p = pinch.grabbed;
+      p.el.classList.remove('drag');
+      pinch.grabbed = null;
+      flashCursor();
+      snapCheck(p);
+    }
+
+    function flashCursor() {
+      vCursor.classList.remove('click-flash');
+      void vCursor.offsetWidth;
+      vCursor.classList.add('click-flash');
+    }
+
+    async function initHandDetector() {
+      if (hand.detector) return true;
+      if (typeof Hands === 'undefined') {
+        setStatus('gesture lib not loaded');
+        return false;
+      }
+      setStatus('loading gesture model…');
+      try {
+        hand.detector = new Hands({
+          locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${f}`,
+        });
+        hand.detector.setOptions({
+          maxNumHands: 1,
+          modelComplexity: 0,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5,
+        });
+        hand.detector.onResults(onHandResults);
+        if (typeof hand.detector.initialize === 'function') {
+          await hand.detector.initialize();
+        }
+        hand.ready = true;
+        setStatus('gesture ready — show palm');
+        return true;
+      } catch (err) {
+        console.error('[gesture] init failed', err);
+        setStatus('gesture init failed: ' + (err.message || err));
+        hand.detector = null;
+        return false;
+      }
+    }
+
+    async function detectionTick() {
+      if (!hand.running) return;
+      const now = performance.now();
+      if (!hand.busy && hand.ready && detectVideo.videoWidth && (now - hand.lastSent) >= hand.sendIntervalMs) {
+        hand.busy = true;
+        hand.lastSent = now;
+        try {
+          await hand.detector.send({ image: detectVideo });
+        } catch (err) {
+          console.error('[gesture] send failed', err);
+          hand.busy = false;
+          if (screens.camera.classList.contains('active')) setStatus('gesture send error (see console)');
+        }
+      }
+      if (screens.camera.classList.contains('active') && hand.ready && !hand.gotResult && hand.lastSent && (performance.now() - hand.lastSent > 4000)) {
+        setStatus('no results from detector — check console');
+      }
+      hand.rafId = requestAnimationFrame(detectionTick);
+    }
+
+    async function startHandDetection() {
+      palmRing.classList.add('alive');
+      if (hand.running) return;
+      const ok = await initHandDetector();
+      if (!ok) { palmRing.classList.remove('alive'); return; }
+      hand.running = true;
+      hand.palmFrames = 0;
+      hand.lastSent = 0;
+      hand.gotResult = false;
+      updatePalmRing(0);
+      hand.rafId = requestAnimationFrame(detectionTick);
+    }
+
+    function stopHandDetection() {
+      hand.running = false;
+      if (hand.rafId) cancelAnimationFrame(hand.rafId);
+      hand.rafId = 0;
+      hand.palmFrames = 0;
+      palmRing.classList.remove('alive');
+      updatePalmRing(0);
+    }
+
+    btnStart.addEventListener('click', async () => {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        startError.textContent = 'Camera not available. Serve this page over HTTPS or localhost.';
+        return;
+      }
+      btnStart.disabled = true;
+      startError.textContent = '';
+      show('camera');
+      const ok = await openCamera();
+      btnStart.disabled = false;
+      btnStart.textContent = ok ? 'Open camera' : 'Retry';
+    });
+
+    btnBackToStart.addEventListener('click', () => { stopCamera(); show('start'); });
+    btnFlip.addEventListener('click', async () => {
+      state.facing = state.facing === 'user' ? 'environment' : 'user';
+      video.style.transform = state.facing === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+      await openCamera();
+    });
+
+    // ============================================================
+    // 2. two-finger tap capture
+    // ============================================================
+    const camScreen = screens.camera;
+    const shutter = document.getElementById('shutter');
+    const btnCapture = document.getElementById('btn-capture');
+
+    let twoFinger = { down: false, startedAt: 0 };
+    camScreen.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        twoFinger.down = true;
+        twoFinger.startedAt = Date.now();
+      } else {
+        twoFinger.down = false;
+      }
+    }, { passive: true });
+
+    camScreen.addEventListener('touchend', (e) => {
+      if (twoFinger.down && Date.now() - twoFinger.startedAt < 450 && e.touches.length === 0) {
+        capture();
+      }
+      twoFinger.down = false;
+    }, { passive: true });
+
+    camScreen.addEventListener('touchcancel', () => { twoFinger.down = false; }, { passive: true });
+
+    btnCapture.addEventListener('click', capture);
+    window.addEventListener('keydown', (e) => {
+      if (screens.camera.classList.contains('active') && (e.code === 'Space' || e.code === 'Enter')) {
+        e.preventDefault();
+        capture();
+      }
+    });
+
+    function capture() {
+      if (!state.stream || !video.videoWidth) {
+        startError.textContent = 'Camera not ready. Please wait a moment.';
+        show('start');
+        return;
+      }
+      try {
+        // center-crop a square from the raw video — matches the framed preview
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const s = Math.min(vw, vh);
+        const sx = (vw - s) / 2, sy = (vh - s) / 2;
+        const out = 1080; // output resolution (HD)
+        const canvas = document.createElement('canvas');
+        canvas.width = out; canvas.height = out;
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        // un-mirror if front camera (preview is flipped visually)
+        if (state.facing === 'user') {
+          ctx.translate(out, 0); ctx.scale(-1, 1);
+        }
+        ctx.drawImage(video, sx, sy, s, s, 0, 0, out, out);
+        state.photo = canvas.toDataURL('image/jpeg', 0.95);
+        shutter.classList.remove('flash');
+        void shutter.offsetWidth;
+        shutter.classList.add('flash');
+        // keep the stream + detection alive so gestures work on every screen
+        setTimeout(() => goToPreview(), 220);
+      } catch (e) {
+        startError.textContent = 'Capture failed: ' + (e.message || e);
+        show('start');
+      }
+    }
+
+    // ============================================================
+    // 2.5 preview screen (shows captured photo in a frame)
+    // ============================================================
+    const previewImg = document.getElementById('preview-img');
+    const diffRow = document.getElementById('diff-row');
+
+    function goToPreview() {
+      previewImg.style.backgroundImage = `url(${state.photo})`;
+      // sync the active difficulty button to state.N
+      for (const b of diffRow.querySelectorAll('.diff')) {
+        b.classList.toggle('active', parseInt(b.dataset.n, 10) === state.N);
+      }
+      show('preview');
+    }
+
+    diffRow.addEventListener('click', (e) => {
+      const btn = e.target.closest('.diff');
+      if (!btn) return;
+      for (const b of diffRow.querySelectorAll('.diff')) b.classList.remove('active');
+      btn.classList.add('active');
+      state.N = parseInt(btn.dataset.n, 10);
+    });
+
+    document.getElementById('btn-play').addEventListener('click', () => startGame());
+    document.getElementById('btn-retake').addEventListener('click', async () => {
+      show('camera');
+      await openCamera();
+    });
+
+    // ============================================================
+    // 3. puzzle setup
+    // ============================================================
+    const stage = document.getElementById('stage');
+    const board = (() => {
+      const el = document.createElement('div');
+      el.id = 'board';
+      const inner = document.createElement('div');
+      inner.id = 'board-inner';
+      el.appendChild(inner);
+      stage.appendChild(el);
+      return el;
+    })();
+    const boardInner = document.getElementById('board-inner');
+    // invisible spacer that expands stage's scrollable height to cover the tray
+    const spacer = document.createElement('div');
+    spacer.style.cssText = 'position: relative; pointer-events: none; width: 1px;';
+    stage.appendChild(spacer);
+
+    function layout() {
+      const w = stage.clientWidth;
+      const h = stage.clientHeight;
+      const topRes = 64; // reserved for the game-top bar
+      // board gets roughly the top-half of the viewport so the tray has room
+      const maxBW = w * 0.85;
+      const maxBH = (h - topRes) * 0.55;
+      const size = Math.max(160, Math.min(maxBW, maxBH));
+      const bx = (w - size) / 2;
+      const by = topRes + 12;
+      const pad = 10;
+      state.board = { x: bx + pad, y: by + pad, size: size - pad * 2, cell: (size - pad * 2) / state.N };
+      board.style.width = board.style.height = size + 'px';
+      board.style.left = bx + 'px';
+      board.style.top = by + 'px';
+      board.style.setProperty('--hint-img', `url(${state.photo})`);
+      for (const s of board.querySelectorAll('.slot')) s.remove();
+      for (let r = 0; r < state.N; r++) for (let c = 0; c < state.N; c++) {
+        const slot = document.createElement('div');
+        slot.className = 'slot';
+        slot.style.left = (pad + c * state.board.cell) + 'px';
+        slot.style.top = (pad + r * state.board.cell) + 'px';
+        slot.style.width = slot.style.height = state.board.cell + 'px';
+        board.appendChild(slot);
+      }
+    }
+
+    function startGame() {
+      show('game');
+      state.moves = 0;
+      state.started = Date.now();
+      updateStats();
+      if (state.timerId) clearInterval(state.timerId);
+      state.timerId = setInterval(updateStats, 500);
+
+      // clear previous pieces
+      for (const p of state.pieces) p.el.remove();
+      state.pieces = [];
+      board.classList.remove('hint');
+
+      layout();
+      spawnPieces();
+      stage.scrollTop = 0;
+
+      // keep game-mode hand control fresh
+      pinch.grabbed = null;
+      pinch.wasPinching = false;
+      if (state.stream) {
+        gameVideo.srcObject = state.stream;
+        gameVideo.play().catch(() => { });
+        startHandDetection();
+      }
+    }
+
+    function spawnPieces() {
+      const { cell } = state.board;
+      const bgSize = cell * state.N;
+      const N = state.N;
+
+      const stageW = stage.clientWidth, stageH = stage.clientHeight;
+      const outerBottom = parseFloat(board.style.top) + parseFloat(board.style.height);
+      const trayTop = outerBottom + 14;
+      const trayBottom = stageH - 12;
+      const trayH = Math.max(cell, trayBottom - trayTop);
+
+      const gap = 8;
+      // aim for a compact, roughly 2:1 landscape cluster — no full-width spread
+      const ideal = Math.max(N, Math.ceil(Math.sqrt(N * N * 1.6)));
+      const maxByScreen = Math.max(1, Math.floor((stageW - 40) / (cell + gap)));
+      const cols = Math.min(ideal, maxByScreen);
+      const rowsNeeded = Math.ceil((N * N) / cols);
+      const vStep = rowsNeeded <= 1
+        ? 0
+        : Math.min(cell + gap, (trayH - cell) / Math.max(1, rowsNeeded - 1));
+      const gridW = cols * (cell + gap) - gap;
+      const gridX0 = (stageW - gridW) / 2;
+
+      const traySlots = [];
+      for (let i = 0; i < N * N; i++) {
+        const tr = Math.floor(i / cols);
+        const tc = i % cols;
+        const jx = (Math.random() - 0.5) * 4;
+        const jy = (Math.random() - 0.5) * 4;
+        traySlots.push({
+          x: gridX0 + tc * (cell + gap) + jx,
+          y: trayTop + tr * vStep + jy,
+        });
+      }
+
+      for (let i = traySlots.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [traySlots[i], traySlots[j]] = [traySlots[j], traySlots[i]];
+      }
+
+      let k = 0;
+      for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+        const el = document.createElement('div');
+        el.className = 'piece';
+        el.style.width = el.style.height = cell + 'px';
+        el.style.backgroundImage = `url(${state.photo})`;
+        el.style.backgroundSize = `${bgSize}px ${bgSize}px`;
+        el.style.backgroundPosition = `-${c * cell}px -${r * cell}px`;
+
+        const p = { el, r, c, x: traySlots[k].x, y: traySlots[k].y, locked: false };
+        k++;
+        el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+        attachDrag(p);
+        stage.insertBefore(el, spacer);
+        state.pieces.push(p);
+      }
+
+      // no scrolling in full-viewport layout
+      spacer.style.height = '0px';
+    }
+
+    function reorganizeTray() {
+      if (!state.board) return;
+      const { cell } = state.board;
+      const N = state.N;
+      const stageW = stage.clientWidth, stageH = stage.clientHeight;
+      const outerBottom = parseFloat(board.style.top) + parseFloat(board.style.height);
+      const trayTop = outerBottom + 14;
+      const trayBottom = stageH - 16;
+      const trayH = Math.max(cell, trayBottom - trayTop);
+
+      const unlocked = state.pieces.filter((p) => !p.locked && p !== pinch.grabbed);
+      const count = unlocked.length;
+      if (count === 0) return;
+
+      const gap = 8;
+      const ideal = Math.max(1, Math.ceil(Math.sqrt(count * 1.6)));
+      const maxByScreen = Math.max(1, Math.floor((stageW - 40) / (cell + gap)));
+      const cols = Math.min(ideal, maxByScreen, count);
+      const rowsNeeded = Math.ceil(count / cols);
+      const vStep = rowsNeeded <= 1
+        ? 0
+        : Math.min(cell + gap, (trayH - cell) / Math.max(1, rowsNeeded - 1));
+      const gridW = cols * (cell + gap) - gap;
+      const gridX0 = (stageW - gridW) / 2;
+
+      unlocked.forEach((p, i) => {
+        const tr = Math.floor(i / cols);
+        const tc = i % cols;
+        const nx = gridX0 + tc * (cell + gap);
+        const ny = trayTop + tr * vStep;
+        p.x = nx;
+        p.y = ny;
+        p.el.style.transition = 'transform 0.28s cubic-bezier(.2,1,.3,1)';
+        p.el.style.transform = `translate(${nx}px, ${ny}px)`;
+        setTimeout(() => { p.el.style.transition = ''; }, 320);
+      });
+    }
+
+    // ============================================================
+    // 4. touch drag + snap
+    // ============================================================
+    function attachDrag(p) {
+      const { el } = p;
+      let startX = 0, startY = 0, offsetX = 0, offsetY = 0, pointerId = null;
+
+      el.addEventListener('pointerdown', (e) => {
+        if (p.locked) return;
+        pointerId = e.pointerId;
+        el.setPointerCapture(pointerId);
+        el.classList.add('drag');
+        const r = stage.getBoundingClientRect();
+        // finger position in stage content-local coordinates (includes scroll)
+        const fx = e.clientX - r.left + stage.scrollLeft;
+        const fy = e.clientY - r.top + stage.scrollTop;
+        startX = fx - p.x;
+        startY = fy - p.y;
+        // bring this piece to top of stacking order
+        stage.insertBefore(el, spacer);
+        e.preventDefault();
+      });
+
+      el.addEventListener('pointermove', (e) => {
+        if (e.pointerId !== pointerId) return;
+        const r = stage.getBoundingClientRect();
+        p.x = e.clientX - r.left + stage.scrollLeft - startX;
+        p.y = e.clientY - r.top + stage.scrollTop - startY;
+        el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      });
+
+      const release = (e) => {
+        if (e.pointerId !== pointerId) return;
+        try { el.releasePointerCapture(pointerId); } catch (_) { }
+        pointerId = null;
+        el.classList.remove('drag');
+        snapCheck(p);
+      };
+      el.addEventListener('pointerup', release);
+      el.addEventListener('pointercancel', release);
+    }
+
+    function snapCheck(p) {
+      const { x: bx, y: by, cell } = state.board;
+      const tx = bx + p.c * cell;
+      const ty = by + p.r * cell;
+      const d = Math.hypot(p.x - tx, p.y - ty);
+      state.moves++;
+      updateStats();
+      if (d < cell * 0.45) {
+        // lock with a brief snap animation
+        p.x = tx; p.y = ty; p.locked = true;
+        p.el.style.transition = 'transform 0.18s cubic-bezier(.2,1.5,.4,1), box-shadow 0.2s, filter 0.2s';
+        p.el.style.transform = `translate(${tx}px, ${ty}px)`;
+        p.el.classList.add('locked');
+        setTimeout(() => { p.el.style.transition = ''; }, 200);
+        if (state.pieces.every((q) => q.locked)) winGame();
+        else setTimeout(reorganizeTray, 220);
+      }
+    }
+
+    // ============================================================
+    // 5. stats + hint + win
+    // ============================================================
+    const movesEl = document.getElementById('moves');
+    const timerEl = document.getElementById('timer');
+    function updateStats() {
+      movesEl.textContent = state.moves;
+      const s = Math.floor((Date.now() - state.started) / 1000);
+      timerEl.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }
+
+    document.getElementById('btn-new').addEventListener('click', async () => {
+      if (state.timerId) clearInterval(state.timerId);
+      show('camera');
+      await openCamera();
+    });
+    document.getElementById('btn-hint').addEventListener('click', () => {
+      board.classList.toggle('hint');
+    });
+
+    window.addEventListener('resize', () => {
+      if (!screens.game.classList.contains('active')) return;
+      // relayout board + update piece sizes proportionally
+      const prev = { ...state.board };
+      layout();
+      const scale = state.board.cell / prev.cell;
+      for (const p of state.pieces) {
+        p.el.style.width = p.el.style.height = state.board.cell + 'px';
+        p.el.style.backgroundSize = `${state.board.cell * state.N}px ${state.board.cell * state.N}px`;
+        p.el.style.backgroundPosition = `-${p.c * state.board.cell}px -${p.r * state.board.cell}px`;
+        if (p.locked) {
+          p.x = state.board.x + p.c * state.board.cell;
+          p.y = state.board.y + p.r * state.board.cell;
+        } else {
+          p.x *= scale; p.y *= scale;
+        }
+        p.el.style.transform = `translate(${p.x}px, ${p.y}px)`;
+      }
+    });
+
+    function winGame() {
+      if (state.timerId) clearInterval(state.timerId);
+      const s = Math.floor((Date.now() - state.started) / 1000);
+      const mins = Math.floor(s / 60), secs = s % 60;
+      document.getElementById('win-sub').textContent =
+        `Solved in ${mins}:${String(secs).padStart(2, '0')} · ${state.moves} moves`;
+      document.getElementById('win-preview').style.backgroundImage = `url(${state.photo})`;
+      show('win');
+      burstConfetti();
+    }
+
+    document.getElementById('btn-again').addEventListener('click', async () => {
+      document.getElementById('confetti').innerHTML = '';
+      show('camera');
+      await openCamera();
+    });
+
+    // ============================================================
+    // 6. confetti
+    m '// ============================================================
+    function burstConfetti() {
+      const wrap = document.getElementById('confetti');
+      wrap.innerHTML = '';
+      const colors = ['#6ee7ff', '#ff7ac6', '#58e39b', '#ffd166', '#b69cff'];
+      for (let i = 0; i < 80; i++) {
+        const el = document.createElement('i');
+        el.style.left = Math.random() * 100 + '%';
+        el.style.background = colors[i % colors.length];
+        el.style.animationDuration = (1.4 + Math.random() * 1.6) + 's';
+        el.style.animationDelay = (Math.random() * 0.3) + 's';
+        el.style.transform = `rotate(${Math.random() * 360}deg)`;
+        wrap.appendChild(el);
+      }
+    }
+
+    // ============================================================
+    // 7. initial
+    // ============================================================
+    show('start');
+  </script>
+</body>
+
+</html>
